@@ -43,6 +43,12 @@ data class WeeklyHabitStats(
     val progressRatio: Float = 0f,
     val dailyBreakdown: Map<String, Double> = mapOf(
         "Mon" to 0.0, "Tue" to 0.0, "Wed" to 0.0, "Thu" to 0.0, "Fri" to 0.0, "Sat" to 0.0, "Sun" to 0.0
+    ),
+    val dailyPointsBreakdown: Map<String, Int> = mapOf(
+        "Mon" to 0, "Tue" to 0, "Wed" to 0, "Thu" to 0, "Fri" to 0, "Sat" to 0, "Sun" to 0
+    ),
+    val dailyCountBreakdown: Map<String, Int> = mapOf(
+        "Mon" to 0, "Tue" to 0, "Wed" to 0, "Thu" to 0, "Fri" to 0, "Sat" to 0, "Sun" to 0
     )
 )
 
@@ -162,6 +168,12 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
         val breakdown = days.associateWith { day ->
             logs.filter { it.dayOfWeek.equals(day, ignoreCase = true) }.sumOf { it.co2SavedKg }
         }
+        val pointsBreakdown = days.associateWith { day ->
+            logs.filter { it.dayOfWeek.equals(day, ignoreCase = true) }.sumOf { it.pointsEarned }
+        }
+        val countBreakdown = days.associateWith { day ->
+            logs.filter { it.dayOfWeek.equals(day, ignoreCase = true) }.size
+        }
 
         WeeklyHabitStats(
             weeklyGoalKgCO2 = goal,
@@ -169,7 +181,9 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
             totalLoggedPoints = totalPts,
             habitCountThisWeek = logs.size,
             progressRatio = ratio,
-            dailyBreakdown = breakdown
+            dailyBreakdown = breakdown,
+            dailyPointsBreakdown = pointsBreakdown,
+            dailyCountBreakdown = countBreakdown
         )
     }.stateIn(
         viewModelScope,

@@ -673,65 +673,11 @@ fun HabitTrackerSection(
                 }
             }
 
-            // Weekly Day-by-Day Impact Bar Chart
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Weekly Activity Impact (kg CO₂)",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(84.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-                    val maxCO2 = (weeklyStats.dailyBreakdown.values.maxOrNull() ?: 1.0).coerceAtLeast(2.0)
-
-                    days.forEach { day ->
-                        val dayCO2 = weeklyStats.dailyBreakdown[day] ?: 0.0
-                        val barRatio = (dayCO2 / maxCO2).toFloat().coerceIn(0.08f, 1f)
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Bottom,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (dayCO2 > 0) {
-                                Text(
-                                    text = String.format("%.1f", dayCO2),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Box(
-                                modifier = Modifier
-                                    .width(18.dp)
-                                    .fillMaxHeight(barRatio * 0.7f)
-                                    .background(
-                                        color = if (dayCO2 > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                                    )
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = day,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
+            // Weekly Day-by-Day Impact Bar Chart Component
+            WeeklyHabitBarChart(
+                weeklyStats = weeklyStats,
+                habitLogs = habitLogs
+            )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -1209,4 +1155,240 @@ fun EditWeeklyGoalDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeeklyHabitBarChart(
+    weeklyStats: WeeklyHabitStats,
+    habitLogs: List<HabitLog>,
+    modifier: Modifier = Modifier
+) {
+    var selectedMetric by remember { mutableStateOf("co2") } // "co2", "pts", "count"
+    var selectedDay by remember { mutableStateOf<String?>(null) }
+
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+    val maxVal = when (selectedMetric) {
+        "co2" -> (weeklyStats.dailyBreakdown.values.maxOrNull() ?: 1.0).coerceAtLeast(2.0)
+        "pts" -> (weeklyStats.dailyPointsBreakdown.values.maxOrNull()?.toDouble() ?: 10.0).coerceAtLeast(30.0)
+        else -> (weeklyStats.dailyCountBreakdown.values.maxOrNull()?.toDouble() ?: 1.0).coerceAtLeast(3.0)
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Weekly Breakdown",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            // Metric Toggle Chips
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("co2" to "CO₂", "pts" to "Points", "count" to "Count").forEach { (key, label) ->
+                    FilterChip(
+                        selected = selectedMetric == key,
+                        onClick = {
+                            selectedMetric = key
+                            selectedDay = null
+                        },
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.height(28.dp).testTag("chart_metric_${key}")
+                    )
+                }
+            }
+        }
+
+        // Bar Chart Box
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("weekly_habits_bar_chart"),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Chart Bars Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        days.forEach { day ->
+                            val value = when (selectedMetric) {
+                                "co2" -> weeklyStats.dailyBreakdown[day] ?: 0.0
+                                "pts" -> (weeklyStats.dailyPointsBreakdown[day] ?: 0).toDouble()
+                                else -> (weeklyStats.dailyCountBreakdown[day] ?: 0).toDouble()
+                            }
+
+                            val ratio = (value / maxVal).toFloat().coerceIn(0.06f, 1f)
+                            val isSelected = selectedDay == day
+
+                            val animatedRatio by animateFloatAsState(
+                                targetValue = ratio,
+                                label = "barHeightRatio_$day"
+                            )
+
+                            val barColor = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else if (value > 0) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+                            } else {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            }
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable {
+                                        selectedDay = if (isSelected) null else day
+                                    }
+                                    .testTag("bar_day_$day")
+                            ) {
+                                // Value label above bar
+                                if (value > 0) {
+                                    val valText = if (selectedMetric == "co2") String.format("%.1f", value) else value.toInt().toString()
+                                    Text(
+                                        text = valText,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold
+                                        ),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Bar Pillar
+                                Box(
+                                    modifier = Modifier
+                                        .width(if (isSelected) 22.dp else 16.dp)
+                                        .fillMaxHeight(animatedRatio * 0.72f)
+                                        .background(
+                                            color = barColor,
+                                            shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.dp else 0.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                            shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
+                                        )
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Day Label
+                                Text(
+                                    text = day,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Interactive Day Details Panel when a day bar is clicked
+                selectedDay?.let { day ->
+                    val dayLogs = habitLogs.filter { it.dayOfWeek.equals(day, ignoreCase = true) }
+                    val dayCO2 = weeklyStats.dailyBreakdown[day] ?: 0.0
+                    val dayPts = weeklyStats.dailyPointsBreakdown[day] ?: 0
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("bar_chart_day_details_$day")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$day Impact Breakdown",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "${String.format("%.1f", dayCO2)} kg CO₂ • +$dayPts pts",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            if (dayLogs.isEmpty()) {
+                                Text(
+                                    text = "No activities logged on $day.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    dayLogs.forEach { log ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = log.activityName,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Text(
+                                                text = "+${log.co2SavedKg} kg",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
