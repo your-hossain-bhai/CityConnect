@@ -5,9 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+import com.example.data.database.HabitLog
+
 @Database(
-    entities = [CivicIssue::class, CompletedChallenge::class, SavedRoute::class],
-    version = 1,
+    entities = [CivicIssue::class, CompletedChallenge::class, SavedRoute::class, HabitLog::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

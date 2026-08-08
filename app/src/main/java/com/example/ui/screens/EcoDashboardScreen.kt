@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,8 +29,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.database.HabitLog
 import com.example.ui.viewmodel.Challenge
 import com.example.ui.viewmodel.CityViewModel
+import com.example.ui.viewmodel.HabitPreset
+import com.example.ui.viewmodel.WeeklyHabitStats
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +43,8 @@ fun EcoDashboardScreen(
 ) {
     val ecoScoreData by viewModel.ecoScoreState.collectAsStateWithLifecycle()
     val completedChallenges by viewModel.completedChallenges.collectAsStateWithLifecycle()
+    val habitLogs by viewModel.habitLogs.collectAsStateWithLifecycle()
+    val weeklyHabitStats by viewModel.weeklyHabitStats.collectAsStateWithLifecycle()
     val aqi by viewModel.aqiFlow.collectAsStateWithLifecycle()
     val temp by viewModel.weatherTempFlow.collectAsStateWithLifecycle()
 
@@ -362,7 +368,16 @@ fun EcoDashboardScreen(
             }
         }
 
-        // 3. Daily Sustainability Challenges Label
+        // 3. Sustainable Habit Tracker (Weekly Impact & Log)
+        item {
+            HabitTrackerSection(
+                viewModel = viewModel,
+                weeklyStats = weeklyHabitStats,
+                habitLogs = habitLogs
+            )
+        }
+
+        // 4. Daily Sustainability Challenges Label
         item {
             Text(
                 text = "Daily Green Action Challenges",
@@ -517,4 +532,681 @@ fun ChallengeItem(
             }
         }
     }
+}
+
+@Composable
+fun HabitTrackerSection(
+    viewModel: CityViewModel,
+    weeklyStats: WeeklyHabitStats,
+    habitLogs: List<HabitLog>,
+    modifier: Modifier = Modifier
+) {
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var showGoalDialog by remember { mutableStateOf(false) }
+    var showLoggedHistory by remember { mutableStateOf(false) }
+    var lastLoggedMessage by remember { mutableStateOf<String?>(null) }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = weeklyStats.progressRatio,
+        label = "weeklyProgress"
+    )
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("habit_tracker_card")
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(28.dp)
+            ),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Eco,
+                            contentDescription = "Habit Tracker",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Habit Tracker",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "Log daily sustainable activities",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+
+                // Edit Goal Button
+                IconButton(
+                    onClick = { showGoalDialog = true },
+                    modifier = Modifier.testTag("edit_weekly_goal_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Adjust Goal",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Weekly Environmental Impact Progress
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Weekly Environmental Impact",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "${(weeklyStats.progressRatio * 100).toInt()}% of goal",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(CircleShape)
+                        .testTag("habit_weekly_progress_bar"),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = String.format("%.1f / %.1f kg CO₂ saved", weeklyStats.totalLoggedCO2Kg, weeklyStats.weeklyGoalKgCO2),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "${weeklyStats.habitCountThisWeek} activities • +${weeklyStats.totalLoggedPoints} pts",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // Weekly Day-by-Day Impact Bar Chart
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Weekly Activity Impact (kg CO₂)",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(84.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                    val maxCO2 = (weeklyStats.dailyBreakdown.values.maxOrNull() ?: 1.0).coerceAtLeast(2.0)
+
+                    days.forEach { day ->
+                        val dayCO2 = weeklyStats.dailyBreakdown[day] ?: 0.0
+                        val barRatio = (dayCO2 / maxCO2).toFloat().coerceIn(0.08f, 1f)
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (dayCO2 > 0) {
+                                Text(
+                                    text = String.format("%.1f", dayCO2),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .fillMaxHeight(barRatio * 0.7f)
+                                    .background(
+                                        color = if (dayCO2 > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                    )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = day,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Log Daily Activity - Quick Presets Grid
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Log Daily Activity",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    TextButton(
+                        onClick = { showCustomDialog = true },
+                        modifier = Modifier.testTag("log_custom_habit_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Custom Activity", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                // Preset Chips Grid
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val presets = viewModel.habitPresets
+                    presets.chunked(2).forEach { rowPresets ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowPresets.forEach { preset ->
+                                QuickHabitChip(
+                                    preset = preset,
+                                    onClick = {
+                                        viewModel.logHabit(
+                                            type = preset.habitType,
+                                            title = preset.defaultTitle,
+                                            co2SavedKg = preset.co2SavedKg,
+                                            points = preset.points
+                                        )
+                                        lastLoggedMessage = "Logged ${preset.habitType} (+${preset.co2SavedKg} kg CO₂)"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (rowPresets.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Notification Banner when habit is logged
+            AnimatedVisibility(visible = lastLoggedMessage != null) {
+                lastLoggedMessage?.let { msg ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = msg,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            IconButton(
+                                onClick = { lastLoggedMessage = null },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Dismiss",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Recent Logged Activity History Toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showLoggedHistory = !showLoggedHistory }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Activity History (${habitLogs.size})",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = if (showLoggedHistory) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Toggle History",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (showLoggedHistory) {
+                if (habitLogs.isEmpty()) {
+                    Text(
+                        text = "No sustainable habits logged yet. Tap any activity button above to log your impact!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        habitLogs.take(8).forEach { log ->
+                            HabitHistoryItem(
+                                log = log,
+                                onDelete = { viewModel.deleteHabitLog(log) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Custom Habit Dialog
+    if (showCustomDialog) {
+        CustomHabitDialog(
+            onDismiss = { showCustomDialog = false },
+            onConfirm = { type, title, co2, pts, day ->
+                viewModel.logHabit(type, title, co2, pts, day)
+                lastLoggedMessage = "Logged $title (+${co2} kg CO₂)"
+                showCustomDialog = false
+            }
+        )
+    }
+
+    // Edit Weekly Goal Dialog
+    if (showGoalDialog) {
+        EditWeeklyGoalDialog(
+            currentGoal = weeklyStats.weeklyGoalKgCO2,
+            onDismiss = { showGoalDialog = false },
+            onConfirm = { newGoal ->
+                viewModel.updateWeeklyGoal(newGoal)
+                showGoalDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun QuickHabitChip(
+    preset: HabitPreset,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .testTag("quick_habit_chip_${preset.habitType.lowercase().replace(" ", "_")}"),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val icon = when (preset.iconType) {
+                "bike" -> Icons.Default.DirectionsBike
+                "transit" -> Icons.Default.DirectionsBus
+                "recycle" -> Icons.Default.Recycling
+                "food" -> Icons.Default.Restaurant
+                "flash" -> Icons.Default.Bolt
+                else -> Icons.Default.Eco
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = preset.habitType,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = preset.habitType,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = "+${preset.co2SavedKg} kg CO₂",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HabitHistoryItem(
+    log: HabitLog,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("habit_log_item_${log.id}"),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                val icon = when (log.habitType.lowercase()) {
+                    "biking" -> Icons.Default.DirectionsBike
+                    "public transport", "transit" -> Icons.Default.DirectionsBus
+                    "recycling" -> Icons.Default.Recycling
+                    "plant-based meal", "food" -> Icons.Default.Restaurant
+                    "energy conservation", "power" -> Icons.Default.Bolt
+                    else -> Icons.Default.Eco
+                }
+
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+
+                Column {
+                    Text(
+                        text = log.activityName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${log.dayOfWeek} • ${log.habitType}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Text(
+                        text = "+${log.co2SavedKg} kg CO₂",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(28.dp).testTag("delete_habit_log_${log.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete entry",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomHabitDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (type: String, title: String, co2: Double, pts: Int, day: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf("Biking") }
+    var co2Saved by remember { mutableStateOf("1.5") }
+    var points by remember { mutableStateOf("25") }
+    var selectedDay by remember { mutableStateOf("Mon") }
+
+    val categories = listOf("Biking", "Public Transport", "Recycling", "Plant-Based Meal", "Energy Conservation", "Composting", "Other")
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Log Custom Activity", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Activity Description") },
+                    placeholder = { Text("e.g., Biked 8km to market") },
+                    modifier = Modifier.fillMaxWidth().testTag("custom_habit_title_input"),
+                    singleLine = true
+                )
+
+                Text("Activity Category", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    categories.take(3).forEach { cat ->
+                        FilterChip(
+                            selected = selectedType == cat,
+                            onClick = { selectedType = cat },
+                            label = { Text(cat.take(8), style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = co2Saved,
+                        onValueChange = { co2Saved = it },
+                        label = { Text("CO₂ Saved (kg)") },
+                        modifier = Modifier.weight(1f).testTag("custom_habit_co2_input"),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = points,
+                        onValueChange = { points = it },
+                        label = { Text("Points") },
+                        modifier = Modifier.weight(1f).testTag("custom_habit_points_input"),
+                        singleLine = true
+                    )
+                }
+
+                Text("Day of Week", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    days.forEach { day ->
+                        FilterChip(
+                            selected = selectedDay == day,
+                            onClick = { selectedDay = day },
+                            label = { Text(day, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.padding(horizontal = 1.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        val co2Val = co2Saved.toDoubleOrNull() ?: 1.0
+                        val ptsVal = points.toIntOrNull() ?: 20
+                        onConfirm(selectedType, title, co2Val, ptsVal, selectedDay)
+                    }
+                },
+                modifier = Modifier.testTag("submit_custom_habit_button")
+            ) {
+                Text("Log Activity")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditWeeklyGoalDialog(
+    currentGoal: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var goalText by remember { mutableStateOf(currentGoal.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set Weekly CO₂ Goal (kg)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Set your target environmental impact for this week:", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = goalText,
+                    onValueChange = { goalText = it },
+                    label = { Text("Target kg CO₂") },
+                    modifier = Modifier.fillMaxWidth().testTag("weekly_goal_input"),
+                    singleLine = true
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    listOf(5.0, 10.0, 15.0, 20.0).forEach { preset ->
+                        OutlinedButton(
+                            onClick = { goalText = preset.toString() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("${preset.toInt()} kg", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val g = goalText.toDoubleOrNull()
+                    if (g != null && g > 0) {
+                        onConfirm(g)
+                    }
+                },
+                modifier = Modifier.testTag("save_weekly_goal_button")
+            ) {
+                Text("Save Goal")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

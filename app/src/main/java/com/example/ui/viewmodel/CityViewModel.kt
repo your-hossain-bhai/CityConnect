@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.CivicIssue
 import com.example.data.database.CompletedChallenge
+import com.example.data.database.HabitLog
 import com.example.data.database.SavedRoute
 import com.example.data.repository.CityRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,27 @@ data class Challenge(
     val points: Int,
     val category: String,
     val iconType: String // "transit", "recycle", "energy", "nature"
+)
+
+// Habit Preset UI data model
+data class HabitPreset(
+    val habitType: String,
+    val defaultTitle: String,
+    val co2SavedKg: Double,
+    val points: Int,
+    val iconType: String // "bike", "transit", "recycle", "food", "flash", "leaf"
+)
+
+// Weekly Habit Stats & Impact UI data model
+data class WeeklyHabitStats(
+    val weeklyGoalKgCO2: Double = 10.0,
+    val totalLoggedCO2Kg: Double = 0.0,
+    val totalLoggedPoints: Int = 0,
+    val habitCountThisWeek: Int = 0,
+    val progressRatio: Float = 0f,
+    val dailyBreakdown: Map<String, Double> = mapOf(
+        "Mon" to 0.0, "Tue" to 0.0, "Wed" to 0.0, "Thu" to 0.0, "Fri" to 0.0, "Sat" to 0.0, "Sun" to 0.0
+    )
 )
 
 // Community Event UI data model
@@ -94,6 +116,16 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
         )
     )
 
+    // Sustainable Habit Presets for quick logging
+    val habitPresets = listOf(
+        HabitPreset("Biking", "Biked commute or errand", 1.8, 30, "bike"),
+        HabitPreset("Public Transport", "Rode bus or light rail", 1.2, 25, "transit"),
+        HabitPreset("Recycling", "Recycled plastics, paper & cans", 0.5, 15, "recycle"),
+        HabitPreset("Plant-Based Meal", "Ate a vegetarian/vegan meal", 1.5, 20, "food"),
+        HabitPreset("Energy Conservation", "Unplugged standby electronics", 0.8, 15, "flash"),
+        HabitPreset("Composting", "Composted food waste", 0.6, 15, "leaf")
+    )
+
     // Air Quality Data (Mocked but interactive)
     val aqiFlow = MutableStateFlow(42) // 42 is Good
     val weatherTempFlow = MutableStateFlow(24) // 24 degrees C
@@ -110,14 +142,51 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
     val savedRoutes: StateFlow<List<SavedRoute>> = repository.allSavedRoutes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Dynamic Eco-Score calculations combining completed actions
+    // Habit logs from Room
+    val habitLogs: StateFlow<List<HabitLog>> = repository.allHabitLogs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Target weekly CO2 goal (in kg)
+    val weeklyGoalKgCO2State = MutableStateFlow(10.0)
+
+    // Weekly Habit Impact Stats calculations
+    val weeklyHabitStats: StateFlow<WeeklyHabitStats> = combine(
+        habitLogs,
+        weeklyGoalKgCO2State
+    ) { logs, goal ->
+        val totalCO2 = logs.sumOf { it.co2SavedKg }
+        val totalPts = logs.sumOf { it.pointsEarned }
+        val ratio = if (goal > 0) (totalCO2 / goal).toFloat().coerceIn(0f, 1f) else 0f
+
+        val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        val breakdown = days.associateWith { day ->
+            logs.filter { it.dayOfWeek.equals(day, ignoreCase = true) }.sumOf { it.co2SavedKg }
+        }
+
+        WeeklyHabitStats(
+            weeklyGoalKgCO2 = goal,
+            totalLoggedCO2Kg = totalCO2,
+            totalLoggedPoints = totalPts,
+            habitCountThisWeek = logs.size,
+            progressRatio = ratio,
+            dailyBreakdown = breakdown
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        WeeklyHabitStats()
+    )
+
+    // Dynamic Eco-Score calculations combining completed actions and habits
     val ecoScoreState: StateFlow<EcoScoreData> = combine(
         completedChallenges,
-        savedRoutes
-    ) { completed, routes ->
+        savedRoutes,
+        habitLogs
+    ) { completed, routes, habits ->
         val challengePoints = completed.sumOf { it.points }
         val transitPoints = routes.sumOf { (it.carbonSaved * 15).toInt() }
-        val totalPoints = 120 + challengePoints + transitPoints // starts at baseline 120
+        val habitPoints = habits.sumOf { it.pointsEarned }
+        val totalPoints = 120 + challengePoints + transitPoints + habitPoints // starts at baseline 120
 
         // Calculate level
         val level = when {
@@ -127,14 +196,16 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
             else -> "Mindful Citizen"
         }
 
-        val carbonSavedTotal = routes.sumOf { it.carbonSaved } + (completed.filter { it.challengeId == "ch_1" }.size * 2.8)
+        val carbonSavedTotal = routes.sumOf { it.carbonSaved } +
+                (completed.filter { it.challengeId == "ch_1" }.size * 2.8) +
+                habits.sumOf { it.co2SavedKg }
 
         EcoScoreData(
             score = totalPoints,
             level = level,
             carbonSavedKg = carbonSavedTotal,
             nextLevelProgress = (totalPoints % 150) / 150f,
-            challengesCompletedCount = completed.size,
+            challengesCompletedCount = completed.size + habits.size,
             routesCount = routes.size
         )
     }.stateIn(
@@ -357,6 +428,46 @@ class CityViewModel(private val repository: CityRepository) : ViewModel() {
             isUserAttending = true
         )
         _communityEvents.value = listOf(newEvent) + _communityEvents.value
+    }
+
+    // Habit Logging Actions
+    fun logHabit(type: String, title: String, co2SavedKg: Double, points: Int, dayOfWeek: String? = null) {
+        viewModelScope.launch {
+            val currentDay = dayOfWeek ?: run {
+                val calendar = java.util.Calendar.getInstance()
+                when (calendar.get(java.util.Calendar.DAY_OF_WEEK)) {
+                    java.util.Calendar.MONDAY -> "Mon"
+                    java.util.Calendar.TUESDAY -> "Tue"
+                    java.util.Calendar.WEDNESDAY -> "Wed"
+                    java.util.Calendar.THURSDAY -> "Thu"
+                    java.util.Calendar.FRIDAY -> "Fri"
+                    java.util.Calendar.SATURDAY -> "Sat"
+                    java.util.Calendar.SUNDAY -> "Sun"
+                    else -> "Mon"
+                }
+            }
+
+            val newLog = HabitLog(
+                habitType = type,
+                activityName = title,
+                co2SavedKg = co2SavedKg,
+                pointsEarned = points,
+                dayOfWeek = currentDay
+            )
+            repository.insertHabitLog(newLog)
+        }
+    }
+
+    fun deleteHabitLog(log: HabitLog) {
+        viewModelScope.launch {
+            repository.deleteHabitLog(log)
+        }
+    }
+
+    fun updateWeeklyGoal(newGoal: Double) {
+        if (newGoal > 0) {
+            weeklyGoalKgCO2State.value = newGoal
+        }
     }
 }
 

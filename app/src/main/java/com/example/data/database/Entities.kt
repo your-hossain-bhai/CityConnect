@@ -33,3 +33,14 @@ data class SavedRoute(
     val distanceKm: Double,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "habit_logs")
+data class HabitLog(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val habitType: String, // e.g., "Biking", "Recycling", "Public Transport", "Composting", "Plant-Based", "Energy Saving"
+    val activityName: String,
+    val co2SavedKg: Double,
+    val pointsEarned: Int,
+    val dayOfWeek: String, // "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+    val timestamp: Long = System.currentTimeMillis()
+)

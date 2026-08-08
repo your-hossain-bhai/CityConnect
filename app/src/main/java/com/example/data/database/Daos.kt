@@ -32,4 +32,14 @@ interface CityConnectDao {
 
     @Delete
     suspend fun deleteSavedRoute(route: SavedRoute)
+
+    // Habit Logs
+    @Query("SELECT * FROM habit_logs ORDER BY timestamp DESC")
+    fun getAllHabitLogs(): Flow<List<HabitLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabitLog(log: HabitLog)
+
+    @Delete
+    suspend fun deleteHabitLog(log: HabitLog)
 }
