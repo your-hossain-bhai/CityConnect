@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer eco circle ring for alignment and structure -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:pathData="M 54 22 A 32 32 0 1 1 53.99 22 Z" />
+
+    <!-- Detailed stylized City Leaf inside representing City + Nature Connect -->
+    <!-- Represents high-contrast silhouette -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,32 C41,32 37,45 37,56 C37,64 43,69 50,70 L50,74 C50,75 51,76 52,76 L56,76 C57,76 58,75 58,74 L58,70 C65,69 71,64 71,56 C71,45 67,32 54,32 Z M54,66 C46,66 43,59 43,56 C43,53 45,46 51,40 L51,52 C51,53 52,54 53,54 L55,54 C56,54 57,53 57,52 L57,38 C63,44 65,51 65,56 C65,59 62,66 54,66 Z" />
+</vector>
